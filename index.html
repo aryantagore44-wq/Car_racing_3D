@@ -1,32 +1,57 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Ultimate 3D Car Racing</title>
+    <title>Pro 3D Car Racing & Drifting</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #ui {
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
+        
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Orbitron', sans-serif; user-select: none; }
+        
+        /* Modern Glassmorphism HUD */
+        #hud {
             position: absolute; top: 20px; left: 20px;
-            background: rgba(0, 0, 0, 0.7); color: white;
-            padding: 15px; border-radius: 10px; border: 2px solid #ff0055;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px);
+            color: #fff; padding: 20px; border-radius: 15px;
+            border-left: 5px solid #00ffcc; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
-        #speed-tag {
+        #hud h2 { margin: 0 0 10px 0; color: #00ffcc; text-transform: uppercase; letter-spacing: 2px; }
+        #hud p { margin: 5px 0; font-size: 14px; color: #ccc; }
+
+        /* Need For Speed Style Speedometer */
+        #speed-container {
             position: absolute; bottom: 30px; right: 30px;
-            background: black; color: #00ff00; padding: 20px;
-            border-radius: 50%; border: 5px solid #333;
-            font-size: 24px; font-weight: bold; width: 100px; height: 100px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 0 20px rgba(0,255,0,0.5);
+            width: 150px; height: 150px; background: rgba(0, 0, 0, 0.8);
+            border-radius: 50%; border: 4px solid #333;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.3); transition: 0.2s;
+        }
+        #speed-val { font-size: 48px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #00ffcc; line-height: 1; }
+        #speed-unit { font-size: 16px; color: #00ffcc; margin-top: -5px; }
+        
+        /* Drift Alert */
+        #drift-alert {
+            position: absolute; top: 20px; right: 20px;
+            color: #ff0055; font-size: 28px; font-weight: bold; font-style: italic;
+            text-shadow: 0 0 15px #ff0055; opacity: 0; transition: 0.2s;
         }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        <h2 style="margin:0; color: #ff0055;">SUPER CAR 3D</h2>
-        <p>CONTROL: ARROW KEYS<br>GOAL: Don't hit the Red Boxes!</p>
+    <div id="hud">
+        <h2>Turbo Drift 3D</h2>
+        <p>⬆️ ⬇️ : Drive / Reverse</p>
+        <p>⬅️ ➡️ : Steer</p>
+        <p><b>SPACEBAR</b> : Handbrake / Drift</p>
     </div>
-    <div id="speed-tag"><span id="speed-val">0</span> km/h</div>
+
+    <div id="drift-alert">DRIFTING! 🔥</div>
+
+    <div id="speed-container">
+        <div id="speed-val">0</div>
+        <div id="speed-unit">KM/H</div>
+    </div>
 
     <script type="importmap">
         {
@@ -43,17 +68,25 @@
 
         // --- 1. SETTINGS & VARIABLES ---
         let scene, camera, renderer, car;
-        let speed = 0, maxSpeed = 0.4, acceleration = 0.005, friction = 0.97;
-        let steering = 0, turnSpeed = 0.02;
-        const keys = {};
-        const obstacles = [];
+        
+        // Physics & Speed Engine
+        let speed = 0;
+        let maxSpeed = 2.5;         // Top speed badha di
+        let acceleration = 0.015;   // Pickup badha diya
+        let baseFriction = 0.985;   // Normal chalne ki friction
+        let currentFriction = baseFriction;
+        let baseTurnSpeed = 0.025;
+        let currentTurnSpeed = baseTurnSpeed;
 
-        // --- 2. INITIALIZE GAME ---
+        const keys = {};
+
+        // --- 2. INITIALIZE SCENE ---
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Aasman ka color
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.003); // Door ka view dhundhla (foggy) kiya realism ke liye
+            scene.background = new THREE.Color(0x87CEEB);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -61,41 +94,39 @@
             renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // Lighting (Textures ko chamkane ke liye)
-            const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-            scene.add(ambient);
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
             const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-            sun.position.set(10, 20, 10);
+            sun.position.set(50, 100, 50);
             sun.castShadow = true;
             scene.add(sun);
 
-            // Environment (Zameen aur Raasta)
-            const groundGeo = new THREE.PlaneGeometry(1000, 1000);
-            const groundMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            const ground = new THREE.Mesh(groundGeo, groundMat);
+            // Infinite Road / Ground
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
             ground.rotation.x = -Math.PI / 2;
             ground.receiveShadow = true;
             scene.add(ground);
 
-            const grid = new THREE.GridHelper(1000, 100, 0xff0055, 0x444444);
+            // Grid Map (Kyunki proper road texture nahi hai abhi)
+            const grid = new THREE.GridHelper(2000, 200, 0x00ffcc, 0x333333);
+            grid.position.y = 0.1;
             scene.add(grid);
 
-            // Add Barriers (Red Cubes)
-            const boxGeo = new THREE.BoxGeometry(3, 3, 3);
-            const boxMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-            for(let i=0; i<40; i++) {
-                const box = new THREE.Mesh(boxGeo, boxMat);
-                box.position.set(Math.random()*200 - 100, 1.5, Math.random()*200 - 100);
-                scene.add(box);
-                obstacles.push(box);
+            // Add simple obstacles to show speed
+            for(let i=0; i<100; i++) {
+                const pilarGeo = new THREE.CylinderGeometry(1, 1, 10, 8);
+                const pilarMat = new THREE.MeshStandardMaterial({ color: 0xff0055 });
+                const pillar = new THREE.Mesh(pilarGeo, pilarMat);
+                pillar.position.set((Math.random() - 0.5) * 500, 5, (Math.random() - 0.5) * 500);
+                scene.add(pillar);
             }
 
-            // --- 3. LOAD CAR & TEXTURES ---
+            // --- 3. LOAD CAR ---
             const textureLoader = new THREE.TextureLoader();
-            
-            // YAHAN APNE TEXTURE FILE KA NAAM LIKHO
-            const texture1 = textureLoader.load('textures/body.png'); // Example name
-            const texture2 = textureLoader.load('textures/wheels.png'); // Example name
+            // Yahan apni images ke naam daalo!
+            const tBody = textureLoader.load('textures/body.png'); 
+            const tWheels = textureLoader.load('textures/wheels.png'); 
 
             const loader = new GLTFLoader();
             loader.load('scene.gltf', (gltf) => {
@@ -104,56 +135,76 @@
                 car.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
-                        // Ye textures apply karega agar mesh ke naam match hue
-                        if(child.name.includes("Body")) child.material.map = texture1;
-                        if(child.name.includes("Wheel")) child.material.map = texture2;
+                        // Textures apply
+                        if(child.name.includes("Body")) child.material.map = tBody;
+                        if(child.name.includes("Wheel")) child.material.map = tWheels;
                     }
                 });
 
+                // **CRITICAL FIX: Car ka size bahut chota kar diya**
+                car.scale.set(0.005, 0.005, 0.005); 
+                car.position.y = 0.5; // Zameen se thoda upar
+
                 scene.add(car);
-                car.position.y = 0.01; 
-                console.log("Game Ready!");
+                console.log("Car Loaded and Scaled Down!");
             });
 
             // Input Listeners
             window.addEventListener('keydown', (e) => keys[e.code] = true);
             window.addEventListener('keyup', (e) => keys[e.code] = false);
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
         }
 
-        // --- 4. GAME ENGINE (ANIMATION) ---
+        // --- 4. GAME ENGINE (ANIMATION & PHYSICS) ---
         function animate() {
             requestAnimationFrame(animate);
 
             if (car) {
-                // Driving Logic
-                if (keys['ArrowUp']) speed -= acceleration;
-                if (keys['ArrowDown']) speed += acceleration;
-                
-                // Steering (Sirf chalte waqt mudegi)
-                if (keys['ArrowLeft']) car.rotation.y += turnSpeed * (speed / maxSpeed);
-                if (keys['ArrowRight']) car.rotation.y -= turnSpeed * (speed / maxSpeed);
+                // Acceleration Logic
+                if (keys['ArrowUp'] && speed < maxSpeed) speed += acceleration;
+                if (keys['ArrowDown'] && speed > -maxSpeed/2) speed -= acceleration; // Reverse speed aadhi hoti hai
 
-                // Apply Friction (Dheere dheere rukna)
-                speed *= friction;
-                car.translateZ(speed);
+                // DRIFT SYSTEM LOGIC
+                const driftAlert = document.getElementById('drift-alert');
+                const speedometer = document.getElementById('speed-container');
 
-                // Speedometer update
-                document.getElementById('speed-val').innerText = Math.round(Math.abs(speed * 500));
+                if (keys['Space'] && Math.abs(speed) > 0.5) {
+                    // Space dabane par: Handbrake & Drift
+                    currentFriction = 0.96; // Fislegi
+                    currentTurnSpeed = baseTurnSpeed * 1.8; // Sharp mudegi
+                    driftAlert.style.opacity = 1;
+                    speedometer.style.borderColor = "#ff0055"; // Speedometer laal ho jayega
+                } else {
+                    // Normal Driving
+                    currentFriction = baseFriction;
+                    currentTurnSpeed = baseTurnSpeed;
+                    driftAlert.style.opacity = 0;
+                    speedometer.style.borderColor = "#333";
+                }
 
-                // Collision Detection
-                const carBox = new THREE.Box3().setFromObject(car);
-                obstacles.forEach(obj => {
-                    const objBox = new THREE.Box3().setFromObject(obj);
-                    if(carBox.intersectsBox(objBox)) {
-                        speed = -speed * 0.8; // Takrane par bounce back
-                    }
-                });
+                // Steering Logic
+                if (keys['ArrowLeft']) car.rotation.y += currentTurnSpeed * (speed / maxSpeed);
+                if (keys['ArrowRight']) car.rotation.y -= currentTurnSpeed * (speed / maxSpeed);
 
-                // Smooth Camera Follow
-                const offset = new THREE.Vector3(0, 5, 12); // Piche aur upar
+                // Apply Friction & Move
+                speed *= currentFriction;
+                car.translateZ(speed); // Negative Z is usually forward in gltf, agar car piche chal rahi ho toh ise '-speed' kar dena
+
+                // Speedometer Update (Realistic numbers)
+                // Speed calculation ko fix kiya hai
+                let displaySpeed = Math.round(Math.abs(speed * 85)); 
+                document.getElementById('speed-val').innerText = displaySpeed;
+
+                // Dynamic Camera (Speed ke hisaab se camera thoda piche jayega = feel of speed)
+                const cameraZOffset = 8 + (Math.abs(speed) * 2); // Tez chalne pe camera zoom out hoga
+                const offset = new THREE.Vector3(0, 3, cameraZOffset); 
                 const cameraPos = offset.applyMatrix4(car.matrixWorld);
-                camera.position.lerp(cameraPos, 0.1);
-                camera.lookAt(car.position);
+                camera.position.lerp(cameraPos, 0.15); // Smooth camera follow
+                camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
             }
 
             renderer.render(scene, camera);
@@ -161,14 +212,6 @@
 
         init();
         animate();
-
-        // Screen Resize fix
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
     </script>
 </body>
 </html>
