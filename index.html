@@ -155,7 +155,7 @@ sun.shadow.camera.near = 1; sun.shadow.camera.far = 700;
 sun.shadow.camera.left = sun.shadow.camera.bottom = -300;
 sun.shadow.camera.right = sun.shadow.camera.top = 300;
 scene.add(sun);
-scene.add(Object.assign(new THREE.DirectionalLight(0x2244aa,0.6),{position:{x:-50,y:30,z:-30}}));
+const fillLight2=new THREE.DirectionalLight(0x2244aa,0.6); fillLight2.position.set(-50,30,-30); scene.add(fillLight2);
 
 // ============================================================
 //  TRACK
@@ -275,8 +275,7 @@ for(let i=0;i<TRACK_SEGS;i+=5){
 function addGrandstand(x,z,angle){
   const g=new THREE.Group();
   const w=32, d=12, rows=6;
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w,0.4,d),
-    new THREE.MeshStandardMaterial({color:0x222233})),{position:{x:0,y:0.2,z:0}}));
+  const gBase=new THREE.Mesh(new THREE.BoxGeometry(w,0.4,d), new THREE.MeshStandardMaterial({color:0x222233})); gBase.position.set(0,0.2,0); g.add(gBase);
   for(let r=0;r<rows;r++){
     const row=new THREE.Mesh(new THREE.BoxGeometry(w,0.25,1.5),
       new THREE.MeshStandardMaterial({color:r%3===0?0xff3300:r%3===1?0x0055ff:0xffffff}));
@@ -359,12 +358,9 @@ function addTireStack(x,z){
 // Cones
 function addCone(x,z){
   const g=new THREE.Group();
-  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.12,8),
-    new THREE.MeshStandardMaterial({color:0xff4400})),{position:{x:0,y:0.06,z:0}}));
-  g.add(Object.assign(new THREE.Mesh(new THREE.ConeGeometry(0.3,1,8),
-    new THREE.MeshStandardMaterial({color:0xff6600})),{position:{x:0,y:0.7,z:0}}));
-  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.31,0.31,0.1,8),
-    new THREE.MeshStandardMaterial({color:0xffffff})),{position:{x:0,y:0.5,z:0}}));
+  const cBase=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.12,8), new THREE.MeshStandardMaterial({color:0xff4400})); cBase.position.set(0,0.06,0); g.add(cBase);
+  const cTop=new THREE.Mesh(new THREE.ConeGeometry(0.3,1,8), new THREE.MeshStandardMaterial({color:0xff6600})); cTop.position.set(0,0.7,0); g.add(cTop);
+  const cStripe=new THREE.Mesh(new THREE.CylinderGeometry(0.31,0.31,0.1,8), new THREE.MeshStandardMaterial({color:0xffffff})); cStripe.position.set(0,0.5,0); g.add(cStripe);
   g.position.set(x,0,z); g.castShadow=true; scene.add(g);
 }
 for(let i=0;i<TRACK_SEGS;i+=4){
@@ -427,8 +423,7 @@ function buildCar(color, isPlayer){
     const wg=new THREE.Group();
     const tire=new THREE.Mesh(new THREE.CylinderGeometry(0.38,0.38,0.38,16),wm);
     tire.rotation.z=Math.PI/2; tire.castShadow=true; wg.add(tire);
-    wg.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.4,5),rm),
-      {rotation:{z:Math.PI/2}}));
+    const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.4,5),rm); rim.rotation.z=Math.PI/2; wg.add(rim);
     wg.position.set(x,y,z); g.add(wg); wheels.push(wg);
   });
   const tlm=new THREE.MeshStandardMaterial({color:0xff0000,emissive:0xff0000,emissiveIntensity:2});
@@ -484,7 +479,7 @@ const pState={
 const NPC_COUNT=5;
 const NPC_COLORS=[0x0088ff,0x00ff44,0xffcc00,0xaa00ff,0xff0088];
 const NPC_SPEEDS=[19,23,27,21,25];
-const NPC_LANE=[−7,−3.5,0,3.5,7];
+const NPC_LANE=[-7,-3.5,0,3.5,7];
 const npcStates=Array.from({length:NPC_COUNT},(_,i)=>({
   t:0.05+i*0.16, speed:NPC_SPEEDS[i], lane:NPC_LANE[i]||i*3.5-7,
   lap:1, mesh:null, wheels:[], wobble:Math.random()*Math.PI*2,
