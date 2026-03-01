@@ -1,17 +1,32 @@
 <!DOCTYPE html>
-<html>
+<html lang="hi">
 <head>
-    <title>3D Car Game - Final</title>
+    <meta charset="UTF-8">
+    <title>Ultimate 3D Car Racing</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; } /* Sky Blue Background */
-        #ui { position: absolute; top: 20px; left: 20px; font-family: sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0, 0, 0, 0.7); color: white;
+            padding: 15px; border-radius: 10px; border: 2px solid #ff0055;
+        }
+        #speed-tag {
+            position: absolute; bottom: 30px; right: 30px;
+            background: black; color: #00ff00; padding: 20px;
+            border-radius: 50%; border: 5px solid #333;
+            font-size: 24px; font-weight: bold; width: 100px; height: 100px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(0,255,0,0.5);
+        }
     </style>
 </head>
 <body>
+
     <div id="ui">
-        <h2>3D Car Racing</h2>
-        <p>Use ARROW KEYS to Drive</p>
+        <h2 style="margin:0; color: #ff0055;">SUPER CAR 3D</h2>
+        <p>CONTROL: ARROW KEYS<br>GOAL: Don't hit the Red Boxes!</p>
     </div>
+    <div id="speed-tag"><span id="speed-val">0</span> km/h</div>
 
     <script type="importmap">
         {
@@ -26,98 +41,134 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // 1. Scene & Environment
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Sky color
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(-10, 15, 10);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ReinhardToneMapping; // Better colors
-        renderer.toneMappingExposure = 2; 
-        document.body.appendChild(renderer.domElement);
-
-        // Lights (Isse color dikhenge)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
-        scene.add(ambientLight);
-
-        const sunLight = new THREE.DirectionalLight(0xffffff, 2);
-        sunLight.position.set(5, 10, 5);
-        scene.add(sunLight);
-
-        // Road/Environment
-        const grid = new THREE.GridHelper(200, 50, 0xffffff, 0x555555);
-        scene.add(grid);
-
-        const roadGeo = new THREE.PlaneGeometry(200, 200);
-        const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-        const road = new THREE.Mesh(roadGeo, roadMat);
-        road.rotation.x = -Math.PI / 2;
-        scene.add(road);
-
-        // 2. Car Loading & Movement Variables
-        let car;
-        let speed = 0;
-        let turn = 0;
+        // --- 1. SETTINGS & VARIABLES ---
+        let scene, camera, renderer, car;
+        let speed = 0, maxSpeed = 0.4, acceleration = 0.005, friction = 0.97;
+        let steering = 0, turnSpeed = 0.02;
         const keys = {};
+        const obstacles = [];
 
-        const loader = new GLTFLoader();
-        loader.load('scene.gltf', (gltf) => {
-            car = gltf.scene;
-            scene.add(car);
+        // --- 2. INITIALIZE GAME ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Aasman ka color
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             
-            // Model ko center aur scale karna
-            car.scale.set(1, 1, 1); // Agar car bahut badi hai toh 0.1 kar dein
-            car.position.set(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting (Textures ko chamkane ke liye)
+            const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+            sun.position.set(10, 20, 10);
+            sun.castShadow = true;
+            scene.add(sun);
+
+            // Environment (Zameen aur Raasta)
+            const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const grid = new THREE.GridHelper(1000, 100, 0xff0055, 0x444444);
+            scene.add(grid);
+
+            // Add Barriers (Red Cubes)
+            const boxGeo = new THREE.BoxGeometry(3, 3, 3);
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            for(let i=0; i<40; i++) {
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                box.position.set(Math.random()*200 - 100, 1.5, Math.random()*200 - 100);
+                scene.add(box);
+                obstacles.push(box);
+            }
+
+            // --- 3. LOAD CAR & TEXTURES ---
+            const textureLoader = new THREE.TextureLoader();
             
-            console.log("Car loaded with textures!");
-        });
+            // YAHAN APNE TEXTURE FILE KA NAAM LIKHO
+            const texture1 = textureLoader.load('textures/body.png'); // Example name
+            const texture2 = textureLoader.load('textures/wheels.png'); // Example name
 
-        // Controls
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
+            const loader = new GLTFLoader();
+            loader.load('scene.gltf', (gltf) => {
+                car = gltf.scene;
+                
+                car.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        // Ye textures apply karega agar mesh ke naam match hue
+                        if(child.name.includes("Body")) child.material.map = texture1;
+                        if(child.name.includes("Wheel")) child.material.map = texture2;
+                    }
+                });
 
-        // 3. Game Loop
+                scene.add(car);
+                car.position.y = 0.01; 
+                console.log("Game Ready!");
+            });
+
+            // Input Listeners
+            window.addEventListener('keydown', (e) => keys[e.code] = true);
+            window.addEventListener('keyup', (e) => keys[e.code] = false);
+        }
+
+        // --- 4. GAME ENGINE (ANIMATION) ---
         function animate() {
             requestAnimationFrame(animate);
 
             if (car) {
-                // Forward/Backward logic
-                if (keys['ArrowUp']) speed += 0.01;
-                if (keys['ArrowDown']) speed -= 0.01;
+                // Driving Logic
+                if (keys['ArrowUp']) speed -= acceleration;
+                if (keys['ArrowDown']) speed += acceleration;
                 
-                // Steering logic
-                if (keys['ArrowLeft']) turn += 0.01;
-                if (keys['ArrowRight']) turn -= 0.01;
+                // Steering (Sirf chalte waqt mudegi)
+                if (keys['ArrowLeft']) car.rotation.y += turnSpeed * (speed / maxSpeed);
+                if (keys['ArrowRight']) car.rotation.y -= turnSpeed * (speed / maxSpeed);
 
-                // Physics (friction)
-                speed *= 0.95;
-                turn *= 0.9;
-
+                // Apply Friction (Dheere dheere rukna)
+                speed *= friction;
                 car.translateZ(speed);
-                car.rotation.y += turn * (speed * 0.5); // Speed ke hisaab se turn hoga
 
-                // Camera follow car
-                const relativeCameraOffset = new THREE.Vector3(0, 3, 8);
-                const cameraOffset = relativeCameraOffset.applyMatrix4(car.matrixWorld);
-                camera.position.x = cameraOffset.x;
-                camera.position.y = cameraOffset.y;
-                camera.position.z = cameraOffset.z;
+                // Speedometer update
+                document.getElementById('speed-val').innerText = Math.round(Math.abs(speed * 500));
+
+                // Collision Detection
+                const carBox = new THREE.Box3().setFromObject(car);
+                obstacles.forEach(obj => {
+                    const objBox = new THREE.Box3().setFromObject(obj);
+                    if(carBox.intersectsBox(objBox)) {
+                        speed = -speed * 0.8; // Takrane par bounce back
+                    }
+                });
+
+                // Smooth Camera Follow
+                const offset = new THREE.Vector3(0, 5, 12); // Piche aur upar
+                const cameraPos = offset.applyMatrix4(car.matrixWorld);
+                camera.position.lerp(cameraPos, 0.1);
                 camera.lookAt(car.position);
             }
 
             renderer.render(scene, camera);
         }
 
+        init();
         animate();
 
+        // Screen Resize fix
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
     </script>
 </body>
 </html>
